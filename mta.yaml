@@ -1,0 +1,86 @@
+_schema-version: 3.3.0
+ID: scheduler
+description: A simple CAP project.
+version: 1.0.0
+modules:
+  - name: scheduler-srv
+    type: nodejs
+    path: gen/srv
+    provides:
+      - name: srv-api
+      - name: scheduler-auth
+        properties:
+          srv-url: ${default-url}
+    parameters:
+      buildpack: nodejs_buildpack
+      readiness-health-check-http-endpoint: /health
+      readiness-health-check-type: http
+    build-parameters:
+      builder: npm
+    requires:
+      - name: scheduler-auth
+      - name: uaa_scheduler
+  - name: scheduler-destination-content
+    type: com.sap.application.content
+    requires:
+      - name: scheduler-destination-service
+        parameters:
+          content-target: true
+      - name: scheduler_html_repo_host
+        parameters:
+          service-key:
+            name: scheduler_html_repo_host-key
+      - name: uaa_scheduler
+        parameters:
+          service-key:
+            name: uaa_scheduler-key
+    parameters:
+      content:
+        instance:
+          destinations:
+            - Name: scheduler_scheduler_html_repo_host
+              ServiceInstanceName: scheduler-html5-app-host-service
+              ServiceKeyName: scheduler_html_repo_host-key
+              sap.cloud.service: scheduler
+            - Authentication: OAuth2UserTokenExchange
+              Name: scheduler_uaa_scheduler
+              ServiceInstanceName: scheduler-xsuaa-service
+              ServiceKeyName: uaa_scheduler-key
+              sap.cloud.service: scheduler
+          existing_destinations_policy: ignore
+    build-parameters:
+      no-source: true
+resources:
+  - name: scheduler-destination-service
+    type: org.cloudfoundry.managed-service
+    parameters:
+      config:
+        HTML5Runtime_enabled: true
+        version: 1.0.0
+      service: destination
+      service-name: scheduler-destination-service
+      service-plan: lite
+  - name: scheduler_html_repo_host
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-name: scheduler-html5-app-host-service
+      service-plan: app-host
+  - name: uaa_scheduler
+    type: org.cloudfoundry.managed-service
+    parameters:
+      path: ./xs-security.json
+      service: xsuaa
+      service-name: scheduler-xsuaa-service
+      service-plan: application
+      config:
+        xsappname: scheduler-${org}-${space}
+        tenant-mode: dedicated
+parameters:
+  enable-parallel-deployments: true
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm ci
+        - npx cds build --production
